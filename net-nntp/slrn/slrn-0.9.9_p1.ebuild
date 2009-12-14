@@ -36,7 +36,7 @@ src_compile() {
 	econf \
 		--with-docdir=/usr/share/doc/${PF} \
 		--with-slrnpull \
-		$(use_with uudeview) \
+		$(use_with uudeview uu) \
 		$(use_enable nls) \
 		$(use_with ssl) \
 		|| die "econf failed"
