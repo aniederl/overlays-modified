@@ -13,16 +13,17 @@ SRC_URI="ftp://ftp.uni-erlangen.de/pub/utilities/${PN}/${P}.tar.gz"
 LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sh sparc ~sparc-fbsd x86 ~x86-fbsd"
-IUSE="debug nethack pam selinux multiuser"
+IUSE="debug nethack pam selinux multiuser utempter"
 
 RDEPEND=">=sys-libs/ncurses-5.2
 	pam? ( virtual/pam )
-	selinux? ( sec-policy/selinux-screen )"
+	selinux? ( sec-policy/selinux-screen )
+	utempter? ( virtual/utempter )"
 DEPEND="${RDEPEND}"
 
 pkg_setup() {
 	# Make sure utmp group exists, as it's used later on.
-	enewgroup utmp 406
+	use utempter && enewgroup screen || enewgroup utmp 406
 }
 
 src_unpack() {
@@ -43,7 +44,7 @@ src_unpack() {
 	fi
 
 	# Don't use utempter even if it is found on the system
-	epatch "${FILESDIR}"/4.0.2-no-utempter.patch
+	use utempter || epatch "${FILESDIR}"/4.0.2-no-utempter.patch
 
 	# Don't link against libelf even if it is found on the system
 	epatch "${FILESDIR}"/4.0.2-no-libelf.patch
@@ -109,6 +110,9 @@ src_compile() {
 }
 
 src_install() {
+	local screen_group="utmp"
+	use utempter && screen_group="screen"
+
 	dobin screen || die "dobin failed"
 	keepdir /var/run/screen || die "keepdir failed"
 
@@ -116,7 +120,7 @@ src_install() {
 	then
 		fperms 4755 /usr/bin/screen || die "fperms failed"
 	else
-		fowners root:utmp /{usr/bin,var/run}/screen || die "fowners failed"
+		fowners root:${screen_group} /{usr/bin,var/run}/screen || die "fowners failed"
 		fperms 2755 /usr/bin/screen || die "fperms failed"
 	fi
 
@@ -139,12 +143,15 @@ src_install() {
 }
 
 pkg_postinst() {
+	local screen_group="utmp"
+	use utempter && screen_group="screen"
+
 	if use multiuser
 	then
 		chown root:0 "${ROOT}"/var/run/screen
 		chmod 0755 "${ROOT}"/var/run/screen
 	else
-		chown root:utmp "${ROOT}"/var/run/screen
+		chown root:${screen_group} "${ROOT}"/var/run/screen
 		chmod 0775 "${ROOT}"/var/run/screen
 	fi
 
