@@ -13,7 +13,7 @@ SRC_URI="mirror://sourceforge/${PN}/${MY_P}.tar.gz"
 LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="~alpha ~amd64 ~ia64 ~ppc ~sparc ~x86"
-IUSE="nls ssl uudeview"
+IUSE="nls ssl uudeview mime"
 
 RDEPEND="virtual/mta
 	app-arch/sharutils
@@ -22,6 +22,7 @@ RDEPEND="virtual/mta
 	uudeview? ( dev-libs/uulib )"
 DEPEND="${RDEPEND}
 	nls? ( sys-devel/gettext )"
+PDEPEND="mime? ( net-nntp/slrnmime )"
 
 S="${WORKDIR}"/${MY_P}
 
@@ -30,6 +31,11 @@ src_unpack() {
 	cd "${S}"
 
 	epatch "${FILESDIR}"/${P}-dont-strip.patch
+
+	if use mime ; then
+		epatch "${FILESDIR}"/${P}-minimal-multipart.patch
+		epatch "${FILESDIR}"/${P}-us-ascii-override.patch
+	fi
 }
 
 src_compile() {

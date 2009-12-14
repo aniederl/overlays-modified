@@ -1,0 +1,76 @@
+# This patch will allow slrn to override the charset value "us-ascii"
+# declared in postings with the value of the fallback charset. This
+# might be useful to handle google postings I sometimes ran across,
+# which claimed to be "us-ascii" but had 8 bit characters inside. This
+# can be done by adding 
+
+#  set usascii_override 1
+
+# to the .slrnrc. 
+
+--- src/mime.c	2008-02-10 09:47:52.000000000 +0100
++++ src/mime.c	2008-02-10 09:58:04.000000000 +0100
+@@ -52,6 +52,7 @@
+ #include "common.h"
+ #include "hdrutils.h"
+ 
++int Slrn_Usascii_Override = 0;
+ int Slrn_Use_Meta_Mail = 1;
+ int Slrn_Fold_Headers = 1;
+ char *Slrn_MetaMail_Cmd;
+@@ -201,7 +202,15 @@
+ 	       b++;
+ 	     len = b - charset;
+ 	     
+-	     a->mime.charset = slrn_safe_strnmalloc (charset, len);
++             if( (slrn_case_strncmp((unsigned char *)"us-ascii", charset,8) == 0) 
++                   && (Slrn_Fallback_Input_Charset != NULL) && (Slrn_Usascii_Override != 0) )
++             {
++               a->mime.charset = slrn_safe_strmalloc(Slrn_Fallback_Input_Charset);
++             }
++             else
++             {
++	       a->mime.charset = slrn_safe_strnmalloc (charset, len);
++             }
+ 	     return 0;
+ 	  }
+ 	line = line->next;
+--- src/mime.h	2008-02-10 09:47:52.000000000 +0100
++++ src/mime.h	2008-02-10 09:58:04.000000000 +0100
+@@ -31,6 +31,7 @@
+ extern Slrn_Mime_Error_Obj *slrn_mime_header_encode (char **, char *);
+ 
+ 
++extern int Slrn_Usascii_Override;
+ extern int Slrn_Fold_Headers;
+ extern int Slrn_Use_Meta_Mail;
+ extern char *Slrn_MetaMail_Cmd;
+--- src/startup.c	2008-02-10 09:47:52.000000000 +0100
++++ src/startup.c	2008-02-10 09:58:04.000000000 +0100
+@@ -631,6 +631,7 @@
+ #if !defined(IBMPC_SYSTEM)
+      {"use_blink", &SLtt_Blink_Mode, NULL},
+ #endif
++     {"usascii_override", &Slrn_Usascii_Override, NULL},
+      {"warn_followup_to", &Slrn_Warn_Followup_To, NULL},
+      {"wrap_flags", &Slrn_Wrap_Mode, NULL},
+      {"wrap_method", &Slrn_Wrap_Method, NULL},
+--- src/version.c	2008-02-10 09:52:59.000000000 +0100
++++ src/version.c	2008-02-10 09:58:28.000000000 +0100
+@@ -43,7 +43,7 @@
+ #include "art.h"
+ #include "snprintf.h"
+ 
+-#define SLRN_VERSION_STRING_TW SLRN_VERSION_STRING"/mm"
++#define SLRN_VERSION_STRING_TW SLRN_VERSION_STRING"/mm/ao"
+ char *Slrn_Version_String = SLRN_VERSION_STRING_TW;
+ int Slrn_Version = SLRN_VERSION;
+ 
+@@ -95,6 +95,7 @@
+ static char *included_patches[] =
+ {
+  "minimal_multipart",
++ "usascii_override",
+  ""
+ };
+ 

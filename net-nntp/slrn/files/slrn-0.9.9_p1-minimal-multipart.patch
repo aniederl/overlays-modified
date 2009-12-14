@@ -1,0 +1,398 @@
+# Add minimal multipart support to slrn
+# text type parts are displayed correctly
+# binary and other unsupported parts are hidden
+#
+# Don't expect it to read html postings or
+# to save binary attachments, it just helps to
+# ease the pain when reading pgp/mime signed
+# postings or postings created by pine.
+#
+# You can disable the minimal multipart support by
+# adding "set minimal_multipart 0" in your slrnrc.
+#
+# Thanks to Christian Ebert. He helped a lot to
+# debug this patch, thus you could call it
+# now quite stable.
+#
+# send bugs and other feedback to wiegner(at)gmx.de
+#
+# Thomas Wiegner
+#
+# Changelog
+#
+#  2007-07-10  - Fixed bug with nested multiparts
+#              - Fixed bug with base64 encoded parts
+#  2007-07-14  - Fixed crash due to uninitialized pointers
+#  2007-07-24  - Code cleanup, no crash due to corrupted multipart postings
+#  2007-08-02  - disable/enable via slrnrc
+#  2007-08-18  - Fixed possible crash when decoding qp parts
+#  2007-09-06  - Fixed line->prev of pseudeo article
+#  2007-10-21  - Adapted to 0.9.9 version of slrn
+#  2007-11-09  - Decode headers of multipart postings correctly
+#  2007-12-01  - signatures are ended correctly inside multipart
+#  2008-02-10  - Changed place to add "mm" to version string
+#  2008-05-01  - Reply/Followup works for multipart articles
+#  2008-05-09  - Add NULL as third argument to Slrn_Int_Variables
+
+--- src/art.c	2008-05-01 10:40:56.000000000 +0200
++++ src/art.c	2008-05-01 11:15:36.000000000 +0200
+@@ -3035,6 +3035,11 @@
+      {
+ 	int smart_space = (Slrn_Smart_Quote & 0x01) && ! (l->flags & QUOTE_LINE)
+ 	  && (*l->buf != 0);
++        if (l->flags & HIDDEN_LINE)
++        {
++          l = l->next;
++          continue;
++        }
+ 	if ((*l->buf == 0) && (Slrn_Smart_Quote & 0x02))
+ 	  fputc ('\n', fp);
+ 	else
+@@ -3585,9 +3590,18 @@
+ 	int smart_space = (Slrn_Smart_Quote & 0x01) && ! (l->flags & QUOTE_LINE)
+ 	  && (prefix_arg != 2) && (*l->buf != 0);
+ 	
++	if (l->flags & HIDDEN_LINE)
++	  {
++	     l = l->next;
++	     continue;
++	  }
++
+ 	if (strip_sig
+ 	    && (l->flags & SIGNATURE_LINE))
+-	  break;
++	  {
++	     l = l->next;
++	     continue;
++	  }
+ 	
+ 	if (strip_sig && (l->flags & PGP_SIGNATURE_LINE))
+ 	  {
+--- src/art.h	2008-05-01 10:40:56.000000000 +0200
++++ src/art.h	2008-05-01 10:44:26.000000000 +0200
+@@ -185,6 +185,7 @@
+     int was_modified;
+     int was_parsed;
+     int needs_metamail;
++    char *boundary;
+ }
+ Slrn_Mime_Type;
+ 
+--- src/art_misc.c	2008-05-01 10:40:56.000000000 +0200
++++ src/art_misc.c	2008-05-01 10:44:26.000000000 +0200
+@@ -406,6 +406,7 @@
+    
+    while (l != NULL)
+      {
++        if(l->flags & HIDDEN_LINE) break;
+         l->flags |= SIGNATURE_LINE;
+         l->flags &= ~(
+ 		      QUOTE_LINE  /* if in a signature, not a quote */
+--- src/mime.c	2008-05-01 10:40:56.000000000 +0200
++++ src/mime.c	2008-05-01 11:09:52.000000000 +0200
+@@ -55,6 +55,7 @@
+ int Slrn_Use_Meta_Mail = 1;
+ int Slrn_Fold_Headers = 1;
+ char *Slrn_MetaMail_Cmd;
++int Slrn_Minimal_Multipart =1;
+ 
+ #ifndef SLRNPULL_CODE
+ #define CONTENT_TYPE_TEXT		0x01
+@@ -106,17 +107,60 @@
+ 	  }
+ 	b += 5;
+      }
+-   else if (0 == slrn_case_strncmp (b, "message/", 5))
++   else if (0 == slrn_case_strncmp (b, "message/", 8))
+      {
+ 	a->mime.content_type = CONTENT_TYPE_MESSAGE;
+ 	a->mime.content_subtype = CONTENT_SUBTYPE_UNKNOWN;
+ 	b += 8;
+      }
+-   else if (0 == slrn_case_strncmp (b, "multipart/", 5))
++     else if (0 == slrn_case_strncmp (b, "application/", 12))
++      {
++ 	b += 12;
++ 	if (0 != slrn_case_strncmp (b, "pgp-signature", 13))
++ 	  {
++ 	     a->mime.content_type = CONTENT_TYPE_UNSUPPORTED;
++ 	     a->mime.content_subtype = CONTENT_SUBTYPE_UNSUPPORTED;
++ 	     return -1;
++ 	  }
++ 	a->mime.content_type = CONTENT_TYPE_TEXT;
++ 	a->mime.content_subtype = CONTENT_SUBTYPE_PLAIN;
++      }
++   else if (0 == slrn_case_strncmp (b, "multipart/", 10))
+      {
+ 	a->mime.content_type = CONTENT_TYPE_MULTIPART;
+ 	a->mime.content_subtype = CONTENT_SUBTYPE_UNKNOWN;
+ 	b += 10;
++ 	while (NULL != (b = slrn_strbyte(b, ';')))
++ 	  {
++ 	     char *boundary;
++ 	     unsigned int len;
++ 	     
++ 	     b = slrn_skip_whitespace (b + 1);
++ 	     
++ 	     if (0 != slrn_case_strncmp (b, "boundary", 8))
++ 	       continue;
++ 	     
++ 	     b = slrn_skip_whitespace (b + 8);
++ 
++ 	     if (*b != '=') continue;
++ 	     b++;
++ 	     if (*b == '"') b++;
++ 	     boundary = b;
++ 	     while (*b && (*b != ';')
++ 		    && (*b != ' ') && (*b != '\t') && (*b != '\n')
++ 		    && (*b != '"'))
++ 	       b++;
++ 	     len = b - boundary;
++ 
++              /* add a "--" at the start of boundary */
++ 	     a->mime.boundary = slrn_safe_malloc(len+5);
++              a->mime.boundary[0]='-';
++              a->mime.boundary[1]='-';
++              slrn_strncpy(a->mime.boundary+2, boundary, len+1);
++              a->mime.boundary[len+2]='-';
++              a->mime.boundary[len+3]='-';
++ 	     return 0;
++ 	  }
+      }
+    else
+      {
+@@ -786,6 +830,7 @@
+    m->was_parsed = 0;
+    m->needs_metamail = 0;
+    m->charset = NULL;
++   m->boundary = NULL;
+    m->content_type = 0;
+    m->content_subtype = 0;
+ }
+@@ -798,6 +843,10 @@
+     {
+        slrn_free(m->charset);
+     }
++  if (m->boundary != NULL)
++    {
++       slrn_free(m->boundary);
++    }
+ }
+ 
+ /*}}}*/
+@@ -883,7 +932,119 @@
+ 	obj=tmp;
+      }
+ }
++/*}}}*/
++
++int slrn_convert_multipart_article(Slrn_Article_Type *a, char *to_charset)/*{{{*/
++{
++   struct Slrn_Article_Line_Type *line, *first_line,  *line_start_part, *line_end_part, *line_tmp;
++   int len;
++   int j=1;
++   int endfound=0;
++
++   Slrn_Mime_Type mime_bak;
++
++   first_line =a->lines;
++   line       =a->lines;
++   len = strlen(a->mime.boundary)-2;
++   /* search 1st boundary */ 
++   do
++   {
++      if((line->flags & HEADER_LINE) == 0)
++      {
++        line->flags |= HIDDEN_LINE;
++      }
++      line=line->next;
++   } while ((line->next != NULL) && slrn_case_strncmp(line->buf, a->mime.boundary, len) != 0);
++
++   while ((line->next != NULL) && (endfound == 0))
++     {
++       j++;
++       line_start_part = line;
++       do
++       {
++         line->flags |= HIDDEN_LINE;
++         line->flags |= HEADER_LINE;
++         line=line->next; 
++
++       } while ((line->next != NULL) && (*(line->buf) != 0));
++      
++       /* search boundary */
++       while ((line->next != NULL) && (slrn_case_strncmp(line->buf, a->mime.boundary, len) != 0))
++       {
++         line_end_part=line;
++         line=line->next;
++       }
++       if(slrn_case_strncmp(line->buf, a->mime.boundary, len+2) == 0)
++       {
++         /* we found the normal ending boundary */
++         endfound=1;
++       }
++       else if(line->next==NULL)
++       {
++         /* end of article, indicating a corrupted article */
++         endfound=2;
++       }
++
++       /* pseudo article with only multipart */
++       mime_bak = a->mime;
++       slrn_mime_init(&a->mime);
++       a->lines = line_start_part;
++
++       /* start of pseudo article has no prev, save old prev value in line_start_part */
++       line_start_part=line_start_part->prev;
++       a->lines->prev = NULL;
++
++       if(endfound != 2)
++       {
++         line_end_part->next = NULL;
++       }
++
++       _slrn_art_unfold_header_lines(a);
++       slrn_mime_process_article(a);
++       slrn_art_mark_signature(a);
++
++       line->flags |= HIDDEN_LINE;
++       line_tmp = a->lines;
++       do 
++       {
++           if( line_tmp->flags & HEADER_LINE)
++             {
++               line_tmp->flags ^= HEADER_LINE;
++             }
++           else if(a->mime.content_type == CONTENT_TYPE_UNSUPPORTED)
++             {
++               /* hide not supported multiparts */
++               line_tmp->flags |= HIDDEN_LINE;
++             }
++           line_end_part=line_tmp;
++           line_tmp=line_tmp->next;
++       } while (line_tmp != NULL);
++
++       /* set back article */ 
++       line_start_part->next=a->lines;
++       a->lines->prev=line_start_part;
++
++       a->lines = first_line;
++       if(endfound != 2)
++       {
++         line_end_part->next = line;
++         line->prev          = line_end_part;
++       }
++       else
++       {
++         slrn_message (_("Multipart article is corrupted."));
++       }
++
++       if(a->mime.content_type == CONTENT_TYPE_UNSUPPORTED)
++         slrn_message (_("Unsupported multiparts were hidden."));
+ 
++       /* free space */
++       slrn_mime_free(&a->mime);
++
++       a->mime=mime_bak;
++     }
++   return 0;
++}
+ /*}}}*/
+ 
+ static char *guess_body_charset (Slrn_Article_Type *a)
+@@ -938,13 +1099,18 @@
+ 	a->mime.needs_metamail = 1;
+ 	return 0;
+      }
+-   
++
+    if ((a->mime.charset == NULL)
+        && (NULL == (a->mime.charset = guess_body_charset (a))))
+      return -1;
+ 
+    rfc1522_decode_headers (a);
+ 
++   if ((a->mime.content_type == CONTENT_TYPE_MULTIPART) && (Slrn_Minimal_Multipart != 0) )
++     {
++	return slrn_convert_multipart_article(a, Slrn_Display_Charset);
++     }
++   
+    switch (parse_content_transfer_encoding_line (a))
+      {
+       case ENCODED_RAW:
+--- src/mime.h	2008-05-01 10:40:56.000000000 +0200
++++ src/mime.h	2008-05-01 10:44:26.000000000 +0200
+@@ -34,6 +34,7 @@
+ extern int Slrn_Fold_Headers;
+ extern int Slrn_Use_Meta_Mail;
+ extern char *Slrn_MetaMail_Cmd;
++extern int Slrn_Minimal_Multipart;
+ 
+ 
+ #endif /* _SLRN_MIME_H */
+--- src/startup.c	2008-05-01 10:40:56.000000000 +0200
++++ src/startup.c	2008-05-01 10:44:26.000000000 +0200
+@@ -644,6 +644,7 @@
+      {"max_queued_groups", &Slrn_Max_Queued_Groups, NULL},
+      {"use_header_numbers", &Slrn_Use_Header_Numbers, NULL},
+      {"use_localtime", &Slrn_Use_Localtime, NULL},
++     {"minimal_multipart", &Slrn_Minimal_Multipart, NULL},
+ #if SLRN_HAS_SPOILERS
+      {"spoiler_char", &Slrn_Spoiler_Char, NULL},
+      {"spoiler_display_mode", &Slrn_Spoiler_Display_Mode, NULL},
+--- src/version.c	2008-05-01 10:40:56.000000000 +0200
++++ src/version.c	2008-05-01 10:44:26.000000000 +0200
+@@ -43,7 +43,8 @@
+ #include "art.h"
+ #include "snprintf.h"
+ 
+-char *Slrn_Version_String = SLRN_VERSION_STRING;
++#define SLRN_VERSION_STRING_TW SLRN_VERSION_STRING"/mm"
++char *Slrn_Version_String = SLRN_VERSION_STRING_TW;
+ int Slrn_Version = SLRN_VERSION;
+ 
+ typedef struct 
+@@ -91,6 +92,12 @@
+    {NULL, 0}
+ };
+ 
++static char *included_patches[] =
++{
++ "minimal_multipart",
++ ""
++};
++
+ static void print_options (FILE *fp, Compile_Option_Type *opts, char *title)
+ {
+    unsigned int len;
+@@ -121,6 +128,17 @@
+    print_options (fp, Feature_Options, _("Features"));
+ }
+ 
++static void show_included_patches (FILE *fp)
++{
++  int i=0;
++
++  while(*(included_patches[i]) != '\0')
++  {
++    fprintf (fp, _("  %s\n"),included_patches[i]);
++    i++;
++  }
++}
++
+ void slrn_show_version (FILE *fp) /*{{{*/
+ {
+    char *os;
+@@ -150,6 +168,12 @@
+    
+    fprintf (fp, _(" Default posting mechanism: %s\n"),
+ 	    slrn_map_object_id_to_name (1, SLRN_DEFAULT_POST_OBJ));
++
++   if(*included_patches[0] != '\0')
++   {
++      fprintf (fp, _("\nPATCHES:\n"));
++      show_included_patches (fp);
++   }
+ }
+ 
+ /*}}}*/
