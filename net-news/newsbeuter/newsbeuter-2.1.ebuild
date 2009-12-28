@@ -17,7 +17,7 @@ KEYWORDS="amd64 ~ppc x86"
 IUSE="test"
 
 RDEPEND=">=dev-db/sqlite-3.5:3
-	>=dev-libs/stfl-0.19
+	>=dev-libs/stfl-0.21
 	net-misc/curl
 	dev-libs/libxml2"
 
