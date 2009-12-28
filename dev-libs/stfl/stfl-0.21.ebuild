@@ -31,10 +31,12 @@ src_unpack() {
 	cd "${S}"
 	sed -i \
 		-e "s!-Os -ggdb!!" \
-		-e "s!^all:.*!all: libstfl.a!" \
-		Makefile
+		-e "/^all:/ s!example!!" \
+		Makefile || die "sed failed"
 
-	epatch "${FILESDIR}/${P}-multilib.patch"
+	sed -i -e "/cp python\/stfl\.pyc/ d" python/Makefile.snippet || die "sed failed"
+	sed -i -e "s!python/stfl\.pyc!!g"    python/Makefile.snippet Makefile || die "sed failed"
+	sed -i -e "/cd python && python / d" python/Makefile.snippet || die "sed failed"
 
 	if ! use perl; then
 		echo "FOUND_PERL5=0" >>Makefile.cfg
@@ -55,7 +57,8 @@ src_compile() {
 
 src_install() {
 	python_version
-	emake prefix="/usr" DESTDIR="${D}" LIBDIR="$(get_libdir)" install || die "make install failed"
+	emake prefix="/usr" DESTDIR="${D}" libdir="$(get_libdir)" \
+		PYTHON_SITEARCH="/usr/$(get_libdir)/python${PYVER}" install || die "make install failed"
 
 	dodoc README
 
