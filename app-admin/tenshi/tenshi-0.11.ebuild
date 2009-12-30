@@ -29,12 +29,6 @@ src_unpack() {
 	epatch "${FILESDIR}/${PN}-create-mandir.patch"
 	# Fix for bug #218042
 	epatch "${FILESDIR}/${PN}-openrc-init.patch"
-	# Fix for bug #217000
-	epatch "${FILESDIR}/${PN}-remove-timezone-cache.patch"
-
-	# Fixes for bug #243082
-	epatch "${FILESDIR}/${PN}-0.10-solo-queue-escalation.patch"
-	epatch "${FILESDIR}/${PN}-0.10-warn-logfile.patch"
 
 	# Fix for bug #241254
 	sed -i 's:^docdir =.*:docdir = /usr/share/doc/${PF}:' \
