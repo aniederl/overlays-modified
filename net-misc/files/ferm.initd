@@ -1,0 +1,91 @@
+#!/sbin/runscript
+# Copyright 1999-2009 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+# ${Header}: $
+# Based on the Debian ferm package init script Written by Max Kellermann
+#
+
+SCRIPT_NAME=/etc/init.d/ferm
+FERM=/usr/sbin/ferm
+CONFIG=${CONFIG:-/etc/ferm/ferm.conf}
+DESC="Firewall"
+CACHE_DIR=${CACHE_DIR:-/var/cache/ferm}
+FAST=${FAST:-yes}
+CACHE=${CACHE:-no}
+OPTIONS=""
+
+
+[ "${CACHE}" = "yes" -a ! -d ${CACHE_DIR} ] && CACHE=no
+
+
+check_config() {
+  if [ ! -f "${CONFIG}" ] ; then
+    eerror "${CONFIG} does not exist!"
+    eend 1
+  fi
+}
+
+configure_ferm() {
+    local CACHE_NAME=${1:-start}
+
+    if [ "${CACHE}" = "yes" ]; then
+        local CACHE_FILE=${CACHE_DIR}/${CACHE_NAME}.sh
+
+        # The .kernel file saves the kernel version number (copy of
+        # /proc/version).  It is used to ensure that ferm is re-run
+        # after a kernel upgrade.
+
+        if ! diff /proc/version ${CACHE_FILE}.kernel >/dev/null 2>&1 || \
+            ! [ -f ${CACHE_FILE} -a \
+            ${CACHE_FILE} -nt ${CONFIG} -a \
+            -z "`find /etc/ferm -maxdepth 2 -newer ${CACHE_FILE} 2>/dev/null`" -a \
+            ${CACHE_FILE} -nt ${SCRIPT_NAME} -a \
+            ${CACHE_FILE} -nt ${FERM} ]; then
+            rm -f "${CACHE_FILE}" "${CACHE_FILE}".tmp "${CACHE_FILE}".kernel || return $?
+            if [ "${FAST}" = "yes" ]; then
+                ${FERM} ${OPTIONS} --shell ${CONFIG} >${CACHE_FILE}.tmp || return $?
+            else
+                ${FERM} ${OPTIONS} --shell --slow ${CONFIG} >${CACHE_FILE}.tmp || return $?
+            fi
+            cp /proc/version ${CACHE_FILE}.kernel
+            mv ${CACHE_FILE}.tmp ${CACHE_FILE} || return $?
+        else
+            . ${CACHE_FILE} || return $?
+        fi
+    else
+        if [ "${FAST}" = "yes" ]; then
+            ${FERM} ${OPTIONS} ${CONFIG} || return $?
+        else
+            ${FERM} ${OPTIONS} --slow ${CONFIG} || return $?
+        fi
+    fi
+}
+
+
+depend() {
+  need localmount
+  after bootmisc
+  before net
+  provide firewall
+}
+
+start() {
+  check_config
+  ebegin "Starting ferm"
+    configure_ferm start
+  eend $?
+}
+
+stop() {
+  ebegin "Stopping ferm"
+    OPTIONS="${OPTIONS} --flush"
+    configure_ferm stop
+  eend $?
+}
+
+restart() {
+  ebegin "Restarting ferm"
+    svc_stop && svc_start
+  eend $?
+}
+
