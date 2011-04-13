@@ -4,7 +4,7 @@
 
 EAPI="2"
 
-inherit git autotools
+inherit git pam autotools
 
 EGIT_REPO_URI="git://git.berlios.de/leafnode"
 EGIT_BRANCH="lua"
@@ -62,6 +62,11 @@ src_install() {
 	newexe "${FILESDIR}"/fetchnews.cron fetchnews || die "doexe failed"
 	exeinto /etc/cron.daily
 	newexe "${FILESDIR}"/texpire.cron texpire || die "doexe failed"
+
+	# install default pam file
+	if use pam ; then
+		pamd_mimic system-auth leafnode auth account session
+	fi
 
 	if use doc ; then
 		for i in README-FQDN FAQ ; do
