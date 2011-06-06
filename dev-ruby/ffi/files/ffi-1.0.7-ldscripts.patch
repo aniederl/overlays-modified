@@ -1,0 +1,43 @@
+From dae1475ec296c7a831d3a61c0648429f70c4c75c Mon Sep 17 00:00:00 2001
+From: Andreas Niederl <rico32@gmx.net>
+Date: Mon, 6 Jun 2011 03:14:22 +0200
+Subject: [PATCH] ffi_lib: handle ldscript .so files
+
+---
+ lib/ffi/library.rb |   16 ++++++++++++++--
+ 1 files changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/lib/ffi/library.rb b/lib/ffi/library.rb
+index 479c8c6..5226345 100644
+--- a/lib/ffi/library.rb
++++ b/lib/ffi/library.rb
+@@ -67,12 +67,24 @@ module FFI
+               break if lib
+ 
+             rescue Exception => ex
+-              errors[libname] = ex
++              ldscript = false
++              if ex.message =~ /(([^ \t()])+\.so([^ \t:()])*):([ \t])*invalid ELF header/
++                if File.read($1) =~ /GROUP *\( *([^ \)]+) *\)/
++                  libname = $1
++                  ldscript = true
++                end
++              end
++
++              if ldscript
++                retry
++              else
++                errors[libname] = ex
++              end
+             end
+           end
+ 
+           if lib.nil?
+-            raise LoadError.new(errors.values.join('. '))
++            raise LoadError.new(errors.values.join(".\n"))
+           end
+ 
+           # return the found lib
+-- 
+1.7.5.3
+
