@@ -1,13 +1,12 @@
 # Copyright 1999-2011 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Header: /var/cvsroot/gentoo-x86/dev-ruby/ffi/ffi-1.0.7.ebuild,v 1.1 2011/05/02 18:12:25 graaff Exp $
+# $Header: /var/cvsroot/gentoo-x86/dev-ruby/ffi/ffi-1.0.9.ebuild,v 1.1 2011/06/05 09:17:28 graaff Exp $
 
-EAPI=2
+EAPI=3
 
 # jruby → unneeded, this is part of the standard JRuby distribution, and
-# would just install a dummy. ree18 targets no longer supported upstream
-# due to threading issues.
-USE_RUBY="ruby18 ruby19"
+# would just install a dummy.
+USE_RUBY="ruby18 ruby19 ree18"
 
 RUBY_FAKEGEM_TASK_TEST="spec"
 
@@ -15,7 +14,7 @@ RUBY_FAKEGEM_TASK_DOC="doc:rdoc"
 RUBY_FAKEGEM_DOCDIR="doc"
 RUBY_FAKEGEM_EXTRADOC="History.txt README.rdoc"
 
-inherit eutils ruby-fakegem
+inherit ruby-fakegem
 
 DESCRIPTION="Ruby extension for programmatically loading dynamic libraries"
 HOMEPAGE="http://wiki.github.com/ffi/ffi"
@@ -33,8 +32,11 @@ DEPEND="${DEPEND} dev-libs/libffi"
 
 ruby_add_bdepend dev-ruby/rake-compiler
 
+ruby_add_rdepend "virtual/ruby-threads"
+
 each_ruby_prepare() {
-	epatch "${FILESDIR}"/${P}-ldscripts.patch
+	einfo "foo"
+	epatch "${FILESDIR}"/${PN}-1.0.7-ldscripts.patch
 }
 
 each_ruby_compile() {
@@ -46,5 +48,5 @@ all_ruby_install() {
 	all_fakegem_install
 
 	docinto examples
-	dodoc samples/* || die
+	dodoc samples/*
 }
