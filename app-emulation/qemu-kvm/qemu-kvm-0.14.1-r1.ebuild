@@ -4,7 +4,7 @@
 
 BACKPORTS=1
 
-EAPI="2"
+EAPI="3"
 
 if [[ ${PV} = *9999* ]]; then
 	EGIT_REPO_URI="git://git.kernel.org/pub/scm/virt/kvm/qemu-kvm.git"
@@ -29,10 +29,8 @@ LICENSE="GPL-2"
 SLOT="0"
 # xen is disabled until the deps are fixed
 IUSE="+aio alsa bluetooth brltty curl debug esd fdt hardened jpeg ncurses \
-png pulseaudio qemu-ifup rbd sasl sdl spice ssl threads vde \
+png pulseaudio qemu-ifup rbd sasl sdl spice ssl static threads vde \
 +vhost-net xen"
-# static, depends on libsdl being built with USE=static-libs, which can not
-# be expressed in current EAPI's
 
 COMMON_TARGETS="i386 x86_64 arm cris m68k microblaze mips mipsel ppc ppc64 sh4 sh4eb sparc sparc64"
 IUSE_SOFTMMU_TARGETS="${COMMON_TARGETS} mips64 mips64el ppcemb"
@@ -74,6 +72,7 @@ RDEPEND="
 	sdl? ( >=media-libs/libsdl-1.2.11[X] )
 	spice? ( app-emulation/spice )
 	ssl? ( net-libs/gnutls )
+	static? ( sdl? ( media-libs/libsdl[static-libs] ) )
 	vde? ( net-misc/vde )
 	xen? ( app-emulation/xen )
 "
@@ -165,7 +164,7 @@ src_configure() {
 	conf_opts="${conf_opts} --extra-ldflags=-Wl,-z,execheap"
 
 	# Add support for static builds
-	#use static && conf_opts="${conf_opts} --static"
+	use static && conf_opts="${conf_opts} --static"
 
 	# Support debug USE flag
 	use debug && conf_opts="${conf_opts} --enable-debug --disable-strip"
