@@ -14,7 +14,7 @@ SRC_URI="http://ibus.googlecode.com/files/${P}.tar.gz"
 LICENSE="GPL-2 LGPL-2.1"
 SLOT="0"
 KEYWORDS="~amd64 ~x86"
-IUSE="nls"
+IUSE="nls +tables"
 
 RDEPEND=">=app-i18n/ibus-1.2
 	nls? ( virtual/libintl )"
@@ -36,7 +36,9 @@ src_prepare() {
 }
 
 src_configure() {
-	econf $(use_enable nls) --disable-additional
+	local myconf="$(use_enable nls)"
+	use tables || myconf="${myconf} --disable-additional"
+	econf ${myconf}
 }
 
 src_install() {
