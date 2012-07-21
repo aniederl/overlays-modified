@@ -2,7 +2,8 @@
 # Distributed under the terms of the GNU General Public License v2
 # $Header: $
 
-EAPI="2"
+EAPI="3"
+PYTHON_DEPEND="2"
 
 inherit mercurial distutils
 
@@ -17,8 +18,13 @@ SLOT="0"
 KEYWORDS="~amd64 ~x86"
 IUSE=""
 
-DEPEND=">=net-nntp/slrn-0.9.9_p1[mime]"
+DEPEND=">=net-nntp/slrn-0.9.9_p1"
 RDEPEND="${DEPEND}"
+
+pkg_setup() {
+	python_set_active_version 2
+	python_pkg_setup
+}
 
 S="${WORKDIR}/${PN}"
 src_unpack() {
@@ -32,6 +38,7 @@ src_prepare() {
 	sed -i '/^sl\.slrnrc\.createslrnrc/ d' setup.py
 	sed -i "/'sl'/ d" setup.py
 	sed -i 's@\(slanglib =\) slangpath()@\1 '"'${D}/usr/share/${PN}/'"'@' sl/slrnrc.py
+	sed -i 's/python -c/python2 -c/g' sl/slrnmime.sl
 }
 
 src_compile() {
@@ -43,7 +50,7 @@ src_install() {
 
 	# generate slrn configuration
 	dodir /usr/share/${PN}
-	PYTHONPATH="." "${python}" slrnconf.py
+	PYTHONPATH="." "${EPYTHON}" slrnconf.py
 	sed -i "s@${D}@@" "${D}"/usr/share/${PN}/mime.slrnrc
 
 	insinto /usr/share/${PN}
