@@ -4,7 +4,7 @@
 
 EAPI="2"
 
-inherit git pam autotools
+inherit git-2 pam autotools
 
 EGIT_REPO_URI="git://git.berlios.de/leafnode"
 EGIT_BRANCH="lua"
